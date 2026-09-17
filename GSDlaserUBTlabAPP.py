@@ -1,8 +1,8 @@
 """
-Anàlisi Granulomètrica - Streamlit App
+Analisi Granulometrica - Streamlit App
 ========================================
-Permet enganxar dades de tamisatge (mida de gra / % que passa),
-editar-les en una taula, i generar la corba granulomètrica.
+Permet enganxar dades de tamisatge (mida de gra / % que passa) directament
+en una taula buida, editar-les, i generar la corba granulometrica.
 
 Per executar:
     pip install streamlit pandas matplotlib numpy
@@ -13,43 +13,39 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from io import StringIO
 
-st.set_page_config(page_title="Anàlisi Granulomètrica", layout="wide")
+st.set_page_config(page_title="Analisi Granulometrica", layout="wide")
 st.title("📊 Anàlisi Granulomètrica")
 st.caption("Enganxa les dades de tamisatge (mida de gra i % que passa) i genera la corba.")
 
-# ---------- Estat de sessió: llista de mostres ----------
+# ---------- Estat de sessio: llista de mostres ----------
 if "mostres" not in st.session_state:
-    # cada mostra: {"nom": str, "df": DataFrame(mida_mm, pct_passa)}
+    # cada mostra: nom -> DataFrame(mida_mm, pct_passa)
     st.session_state.mostres = {}
 
-# ---------- Dades d'exemple ----------
-EXEMPLE = """mida_mm,pct_passa
-100,100
-50,99
-20,96
-10,90
-5,78
-2,60
-1,45
-0.5,30
-0.25,18
-0.1,10
-0.05,5
-0.02,2
-0.005,0.5
-"""
+# ---------- Taula buida per defecte (per enganxar dades tipus Excel) ----------
+TAULA_BUIDA = pd.DataFrame({"mida_mm": [None] * 12, "pct_passa": [None] * 12})
+
+if "taula_nova" not in st.session_state:
+    st.session_state.taula_nova = TAULA_BUIDA.copy()
 
 with st.sidebar:
     st.header("➕ Afegir mostra")
     nom_mostra = st.text_input("Nom de la mostra", value=f"Mostra {len(st.session_state.mostres) + 1}")
 
-    st.markdown("Enganxa les dades en format CSV (`mida_mm,pct_passa`), una línia per tamís:")
-    text_dades = st.text_area(
-        "Dades",
-        value=EXEMPLE if not st.session_state.mostres else "mida_mm,pct_passa\n",
-        height=280,
+    st.markdown(
+        "Enganxa les dades directament a la taula (clica la primera cel·la "
+        "i fes **Ctrl+V**), o escriu-les a mà. Prem '+' per afegir més files."
+    )
+    taula_editada = st.data_editor(
+        st.session_state.taula_nova,
+        num_rows="dynamic",
+        use_container_width=True,
+        key="editor_nova_mostra",
+        column_config={
+            "mida_mm": st.column_config.NumberColumn("Mida (mm)", format="%.4f"),
+            "pct_passa": st.column_config.NumberColumn("% passa", format="%.2f"),
+        },
     )
 
     col_a, col_b = st.columns(2)
@@ -63,18 +59,15 @@ with st.sidebar:
         st.rerun()
 
     if afegir:
-        try:
-            df = pd.read_csv(StringIO(text_dades))
-            df.columns = [c.strip().lower() for c in df.columns]
-            if not {"mida_mm", "pct_passa"}.issubset(df.columns):
-                st.error("Les columnes han de dir-se 'mida_mm' i 'pct_passa'.")
-            else:
-                df = df[["mida_mm", "pct_passa"]].dropna()
-                df = df.sort_values("mida_mm", ascending=False).reset_index(drop=True)
-                st.session_state.mostres[nom_mostra] = df
-                st.success(f"Mostra '{nom_mostra}' afegida amb {len(df)} punts.")
-        except Exception as e:
-            st.error(f"Error llegint les dades: {e}")
+        df = taula_editada.dropna(subset=["mida_mm", "pct_passa"]).copy()
+        if df.empty:
+            st.error("La taula no té cap fila vàlida (mida_mm i pct_passa).")
+        else:
+            df = df.sort_values("mida_mm", ascending=False).reset_index(drop=True)
+            st.session_state.mostres[nom_mostra] = df
+            st.session_state.taula_nova = TAULA_BUIDA.copy()  # neteja per a la seguent mostra
+            st.success(f"Mostra '{nom_mostra}' afegida amb {len(df)} punts.")
+            st.rerun()
 
     if st.session_state.mostres:
         st.divider()
@@ -84,9 +77,9 @@ with st.sidebar:
             del st.session_state.mostres[per_esborrar]
             st.rerun()
 
-# ---------- Funcions de càlcul ----------
+# ---------- Funcions de calcul ----------
 def interpolar_d(df, pct_objectiu):
-    """Interpola D10, D30, D60 sobre escala log de mida."""
+    """Interpola D10, D80, D84 sobre escala log de mida."""
     d = df.sort_values("mida_mm")
     x = np.log10(d["mida_mm"].values)
     y = d["pct_passa"].values
@@ -97,20 +90,15 @@ def interpolar_d(df, pct_objectiu):
 
 def calcular_parametres(df):
     d10 = interpolar_d(df, 10)
-    d30 = interpolar_d(df, 30)
-    d60 = interpolar_d(df, 60)
-    cu = cc = None
-    if d10 and d60:
-        cu = d60 / d10
-    if d10 and d30 and d60:
-        cc = (d30 ** 2) / (d10 * d60)
-    return d10, d30, d60, cu, cc
+    d80 = interpolar_d(df, 80)
+    d84 = interpolar_d(df, 84)
+    return d10, d80, d84
 
 # ---------- Panell principal ----------
 if not st.session_state.mostres:
-    st.info("👈 Enganxa dades a la barra lateral i prem 'Afegir / Actualitzar' per començar.")
+    st.info("👈 Enganxa dades a la taula de la barra lateral i prem 'Afegir / Actualitzar' per començar.")
 else:
-    tab_grafic, tab_taules, tab_parametres = st.tabs(["📈 Gràfic", "📋 Taules", "🔢 Paràmetres (D10/D30/D60)"])
+    tab_grafic, tab_taules, tab_parametres = st.tabs(["📈 Gràfic", "📋 Taules", "🔢 Paràmetres (D10/D80/D84)"])
 
     with tab_grafic:
         ordre_x = st.radio(
@@ -135,7 +123,6 @@ else:
         ax.set_title("Corba Granulomètrica")
         st.pyplot(fig)
 
-        buf = StringIO()
         fig.savefig("corba_granulometrica.png", dpi=200, bbox_inches="tight")
         with open("corba_granulometrica.png", "rb") as f:
             st.download_button("⬇️ Descarregar gràfic (PNG)", f, file_name="corba_granulometrica.png")
@@ -149,17 +136,15 @@ else:
     with tab_parametres:
         files = []
         for nom, df in st.session_state.mostres.items():
-            d10, d30, d60, cu, cc = calcular_parametres(df)
+            d10, d80, d84 = calcular_parametres(df)
             files.append({
                 "Mostra": nom,
                 "D10 (mm)": round(d10, 4) if d10 else "—",
-                "D30 (mm)": round(d30, 4) if d30 else "—",
-                "D60 (mm)": round(d60, 4) if d60 else "—",
-                "Cu (=D60/D10)": round(cu, 2) if cu else "—",
-                "Cc (=D30²/D10·D60)": round(cc, 2) if cc else "—",
+                "D80 (mm)": round(d80, 4) if d80 else "—",
+                "D84 (mm)": round(d84, 4) if d84 else "—",
             })
         st.dataframe(pd.DataFrame(files), use_container_width=True, hide_index=True)
         st.caption(
-            "Cu > 4-6 i 1 < Cc < 3 solen indicar un sòl ben graduat (segons el sistema USCS). "
-            "Si alguna mostra no té prou rang de dades, D10/D30/D60 poden no calcular-se (—)."
+            "D10, D80 i D84 s'obtenen per interpolació lineal sobre escala logarítmica de la mida de gra. "
+            "Si una mostra no cobreix aquest % de pas, el valor pot no calcular-se (—)."
         )
