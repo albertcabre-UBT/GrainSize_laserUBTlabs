@@ -15,7 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="Analisi Granulometrica", layout="wide")
-st.title("📊 Anàlisi Granulomètrica")
+st.title("Anàlisi Granulomètrica")
 st.caption("Enganxa les dades de tamisatge (mida de gra i % que passa) i genera la corba.")
 
 # ---------- Estat de sessio: llista de mostres ----------
@@ -71,7 +71,7 @@ with st.sidebar:
 
     if st.session_state.mostres:
         st.divider()
-        st.header("🗂️ Mostres actuals")
+        st.header("Mostres actuals")
         per_esborrar = st.selectbox("Esborrar una mostra concreta", ["-"] + list(st.session_state.mostres.keys()))
         if per_esborrar != "-" and st.button("Esborrar seleccionada"):
             del st.session_state.mostres[per_esborrar]
@@ -96,9 +96,9 @@ def calcular_parametres(df):
 
 # ---------- Panell principal ----------
 if not st.session_state.mostres:
-    st.info("👈 Enganxa dades a la taula de la barra lateral i prem 'Afegir / Actualitzar' per començar.")
+    st.info("Enganxa dades a la taula de la barra lateral i prem 'Afegir / Actualitzar' per començar.")
 else:
-    tab_grafic, tab_taules, tab_parametres = st.tabs(["📈 Gràfic", "📋 Taules", "🔢 Paràmetres (D10/D80/D84)"])
+    tab_grafic, tab_taules, tab_parametres = st.tabs(["Gràfic", "Taules", "Paràmetres (D10/D80/D84)"])
 
     with tab_grafic:
         ordre_x = st.radio(
